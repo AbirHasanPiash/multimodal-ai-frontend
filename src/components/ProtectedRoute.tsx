@@ -1,11 +1,24 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { type ReactNode } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import Loading from './Loading';
 
-export default function ProtectedRoute() {
-  const { isAuthenticated, isLoading } = useAuth();
+// Define the interface for props
+interface ProtectedRouteProps {
+  children: ReactNode; 
+}
 
-  if (isLoading) return <div>Loading...</div>;
-  
-  // If not logged in, redirect to login page
-  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+// Add the type to the component function
+export default function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const { token, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <div className="flex h-screen items-center justify-center bg-[#0f1117] text-white"><Loading /></div>;
+  }
+
+  if (!token) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
 }

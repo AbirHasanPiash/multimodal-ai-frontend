@@ -17,10 +17,10 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   isLoading: boolean;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(localStorage.getItem('access_token'));
@@ -28,7 +28,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const navigate = useNavigate();
 
-  // Function to save token and fetch user profile
+  // Define the Fetch Logic Separately
+  const fetchUserProfile = async (accessToken: string) => {
+    try {
+      const response = await api.get('/users/me', {
+        // Ensure we use the specific token passed in, or fallback to state
+        headers: { Authorization: `Bearer ${accessToken}` }
+      });
+      setUser(response.data);
+    } catch (error) {
+      console.error("Failed to fetch user:", error);
+    }
+  };
+
+  // Create the refreshProfile function
+  const refreshProfile = async () => {
+    if (token) {
+      await fetchUserProfile(token);
+    }
+  };
+
   const login = (newToken: string) => {
     localStorage.setItem('access_token', newToken);
     setToken(newToken);
@@ -42,32 +61,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(null);
       setUser(null);
       setIsLoading(false);
-    }, 1);
+    }, 50);
   };
 
-  // Check if token is valid on page load
+  // Use Effect calls the shared logic
   useEffect(() => {
-    const fetchUser = async () => {
+    const initAuth = async () => {
       if (!token) {
         setIsLoading(false);
         return;
       }
       try {
-        const response = await api.get('/users/me');
-        setUser(response.data);
+        await fetchUserProfile(token);
       } catch (error) {
-        console.error("Token invalid", error);
         logout();
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchUser();
+    initAuth();
   }, [token]);
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: !!user, isLoading }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      token, 
+      login, 
+      logout, 
+      refreshProfile,
+      isAuthenticated: !!user, 
+      isLoading 
+    }}>
       {children}
     </AuthContext.Provider>
   );
