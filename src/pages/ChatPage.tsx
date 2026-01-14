@@ -645,7 +645,7 @@ export default function ChatPage() {
             className="w-full appearance-none bg-[#1a1d26] hover:bg-[#1f2229] text-gray-200 text-[11px] sm:text-sm font-semibold rounded-lg sm:rounded-xl border border-gray-700/50 hover:border-blue-500/50 transition-all pl-3 sm:pl-4 pr-8 sm:pr-10 py-2 sm:py-2.5 focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer shadow-lg"
           >
             <optgroup label="🎯 Recommended">
-              <option value="auto">✨ Auto-Select</option>
+              <option value="auto">✨ Smart-Select</option>
             </optgroup>
             <optgroup label="🧠 Intelligence">
               <option value="gpt-5.2-pro">GPT-5.2 Pro</option>
