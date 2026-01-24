@@ -41,7 +41,7 @@ export default function Home() {
           Supercharge your workflow with <span className="text-blue-600">Enterprise AI</span>
         </h1>
         <p className="mt-6 text-xl text-gray-600">
-          Access GPT-4, Gemini, and Claude in one unified workspace. 
+          Access GPT-5, Gemini, and Claude in one unified workspace. 
           Pay only for what you use with our credit system.
         </p>
         

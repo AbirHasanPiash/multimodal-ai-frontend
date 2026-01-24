@@ -50,7 +50,7 @@ export default function Login() {
         {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
         
         <form onSubmit={handleSubmit} className="space-y-4">
-           {/* ... Keep your existing Inputs and Button ... */}
+           {/* Inputs and Button */}
            <input 
             type="email" 
             placeholder="Email address" 

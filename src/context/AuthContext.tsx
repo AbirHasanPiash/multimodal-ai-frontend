@@ -36,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers: { Authorization: `Bearer ${accessToken}` }
       });
       setUser(response.data);
+      console.log("User profile fetched successfully:", response.data);
     } catch (error) {
       console.error("Failed to fetch user:", error);
     }

@@ -1,14 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  PaperAirplaneIcon,
   CpuChipIcon,
-  StopIcon,
   CheckIcon,
   ChevronDownIcon,
   DocumentDuplicateIcon,
-  Squares2X2Icon,
-  ArrowsPointingOutIcon,
   ClipboardDocumentIcon,
 } from "@heroicons/react/24/solid";
 import ReactMarkdown from "react-markdown";
@@ -21,8 +17,18 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useAuth } from "../context/AuthContext";
 import "katex/dist/katex.min.css";
 import { useChatReset } from "../context/ChatResetContext";
+import ChatInput from "../components/ChatInput";
+import ModelSelector from "../components/ModelSelector";
 
 // Types
+
+type Attachment = {
+  name: string;
+  type: string;
+  size: number;
+  mime_type?: string;
+};
+
 type CodeProps = {
   node?: any;
   inline?: boolean;
@@ -37,6 +43,15 @@ type Message = {
   model?: string | null;
   timestamp?: number;
   id: string;
+  attachments?: Attachment[];
+};
+
+type UploadedFileMeta = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  mime_type: string;
 };
 
 type WebSocketPayload =
@@ -58,15 +73,6 @@ const PLACEHOLDERS = [
   "Your AI workspace for productivity and creativity...",
 ];
 
-const THINKING_PHRASES = [
-  "Analyzing your request",
-  "Connecting neural pathways",
-  "Consulting knowledge base",
-  "Formulating response",
-  "Processing patterns",
-  "Synthesizing insights",
-];
-
 export default function ChatPage() {
   const { token, refreshProfile } = useAuth();
   const { chatId: routeChatId } = useParams();
@@ -75,6 +81,8 @@ export default function ChatPage() {
   // State
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+
   const [model, setModel] = useState(() => {
     return sessionStorage.getItem("selectedModel") || "auto";
   });
@@ -86,7 +94,6 @@ export default function ChatPage() {
   const [expandedCodeBlocks, setExpandedCodeBlocks] = useState<{
     [key: string]: boolean;
   }>({});
-  const [isFullWidth, setIsFullWidth] = useState(false);
 
   const activeChatId = routeChatId || null;
 
@@ -121,7 +128,7 @@ export default function ChatPage() {
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.altKey || e.metaKey) return;
-      
+
       const activeTag = document.activeElement?.tagName.toLowerCase();
       if (activeTag === "input" || activeTag === "textarea") return;
 
@@ -150,11 +157,11 @@ export default function ChatPage() {
 
   // Fetch History on Mount
   useEffect(() => {
-    let isActive = true; 
+    let isActive = true;
 
     async function loadHistory() {
       if (!activeChatId || !token) {
-        if (isActive) setMessages([]); 
+        if (isActive) setMessages([]);
         return;
       }
 
@@ -175,9 +182,10 @@ export default function ChatPage() {
               model: m.model,
               id: m.id || `hist-${idx}-${Date.now()}`,
               timestamp: new Date(m.created_at).getTime(),
+              attachments: m.attachments || [],
             })
           );
-           
+
           if (isActive) {
             setMessages(formattedMessages);
           }
@@ -192,7 +200,7 @@ export default function ChatPage() {
     loadHistory();
 
     return () => {
-      isActive = false; 
+      isActive = false;
     };
   }, [activeChatId, token, navigate]);
 
@@ -201,8 +209,11 @@ export default function ChatPage() {
     if (!token) return;
     let isCleanup = false;
     let reconnectTimer: number | undefined;
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const host = window.location.hostname === 'localhost' ? 'localhost:8000' : 'multimodal-ai-z9yy.onrender.com';
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const host =
+      window.location.hostname === "localhost"
+        ? "localhost:8000"
+        : "multimodal-ai-z9yy.onrender.com";
 
     const connect = () => {
       const targetChatId = internalChatIdRef.current || activeChatId || "";
@@ -256,10 +267,14 @@ export default function ChatPage() {
 
             if (sysEvent === "chat_id") {
               const newId = payload;
-              internalChatIdRef.current = newId; 
-              
+              internalChatIdRef.current = newId;
+
               if (!activeChatId) {
-                window.history.replaceState(null, "", `/dashboard/chat/${newId}`);
+                window.history.replaceState(
+                  null,
+                  "",
+                  `/dashboard/chat/${newId}`
+                );
               }
             } else if (sysEvent === "warning") {
               console.warn("System Warning:", payload);
@@ -274,7 +289,7 @@ export default function ChatPage() {
             } else if (sysEvent === "route") {
               currentStreamModel.current = payload;
             } else if (sysEvent === "cost") {
-              refreshProfile(); 
+              refreshProfile();
               setIsStreaming(false);
               isStreamingRef.current = false;
               currentStreamModel.current = null;
@@ -299,9 +314,9 @@ export default function ChatPage() {
 
           if (data.type === "content") {
             const textChunk = data.delta;
-            
+
             setIsThinking(false);
-            
+
             setIsStreaming(true);
             const wasStreaming = isStreamingRef.current;
             isStreamingRef.current = true;
@@ -338,7 +353,7 @@ export default function ChatPage() {
       clearTimeout(reconnectTimer);
       if (ws.current) ws.current.close();
     };
-  }, [token, model, activeChatId]); 
+  }, [token, model, activeChatId]);
 
   // Scroll Logic
   const scrollToBottom = useCallback(() => {
@@ -358,39 +373,103 @@ export default function ChatPage() {
     setShowScrollButton(!isAtBottom);
   };
 
-  // Input Handling
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
-
-  const sendMessage = () => {
-    if (!input.trim() || !ws.current || isStreaming || isThinking)
+  const sendMessage = async () => {
+    if (
+      (!input.trim() && selectedFiles.length === 0) ||
+      !ws.current ||
+      isStreaming ||
+      isThinking
+    )
       return;
-    console.log("Sending message:", input);
+
+    // Optimistic UI Update with attachment metadata
+    const attachmentMeta: Attachment[] = selectedFiles.map((f) => ({
+      name: f.name,
+      size: f.size,
+      type: f.type,
+    }));
+
+    console.log(
+      "Sending message:",
+      input,
+      selectedFiles.length > 0
+        ? `[Attachments: ${selectedFiles.map((f) => f.name).join(", ")}]`
+        : ""
+    );
+
     setMessages((prev) => [
       ...prev,
-      { role: "user", content: input, id: `user-${Date.now()}` },
+      {
+        role: "user",
+        content: input,
+        attachments: attachmentMeta,
+        id: `user-${Date.now()}`,
+      },
     ]);
 
-    const randomPhrase = THINKING_PHRASES[Math.floor(Math.random() * THINKING_PHRASES.length)];
-    setThinkingMessage(randomPhrase);
+    // Set Thinking / Loading State
+    setThinkingMessage(
+      selectedFiles.length > 0 ? "Uploading and analyzing..." : "Thinking..."
+    );
     setIsThinking(true);
 
+    // Handle File Uploads
+    let processedAttachments: UploadedFileMeta[] = [];
+    if (selectedFiles.length > 0) {
+      try {
+        const formData = new FormData();
+        selectedFiles.forEach((file) => {
+          formData.append("files", file);
+        });
+
+        const res = await fetch(`${API_BASE}/api/v1/chat/upload`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.detail || "Upload failed");
+        }
+
+        const data = await res.json();
+        processedAttachments = data.files.filter((f: any) => f.id);
+
+        // Check for failed
+        const failedFiles = data.files.filter((f: any) => !f.id);
+        if (failedFiles.length > 0) {
+          console.error("Some files failed to upload:", failedFiles);
+        }
+      } catch (error) {
+        console.error("File upload error:", error);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "system",
+            content: "⚠️ Failed to upload attachments. Please try again.",
+            id: `sys-${Date.now()}`,
+          },
+        ]);
+        setIsThinking(false);
+        return;
+      }
+    }
+
+    // Send WebSocket Payload
     const payload = JSON.stringify({
       type: "user_message",
       content: input,
+      attachments: processedAttachments,
     });
 
     ws.current.send(payload);
 
+    // Cleanup
     setInput("");
-    
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
+    setSelectedFiles([]);
 
     isAutoScrollEnabled.current = true;
     setTimeout(scrollToBottom, 10);
@@ -408,15 +487,6 @@ export default function ChatPage() {
     ws.current?.close();
     ws.current = null;
   }, [resetKey]);
-
-  // Auto-resize textarea
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-      const newHeight = Math.min(textareaRef.current.scrollHeight, 200);
-      textareaRef.current.style.height = `${newHeight}px`;
-    }
-  }, [input]);
 
   const handleStop = () => {
     if (ws.current && (isStreaming || isThinking)) {
@@ -444,6 +514,115 @@ export default function ChatPage() {
     setExpandedCodeBlocks((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  // File Icon & Color Helper
+  const getFileInfo = (type: string, name: string) => {
+    const lowerName = name.toLowerCase();
+
+    if (
+      type.startsWith("image/") ||
+      lowerName.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/i)
+    ) {
+      return {
+        icon: "🖼️",
+        color: "from-pink-500/20 to-rose-500/20",
+        border: "border-pink-400/40",
+        text: "text-pink-200",
+      };
+    }
+    if (
+      type.startsWith("video/") ||
+      lowerName.match(/\.(mp4|avi|mov|mkv|webm)$/i)
+    ) {
+      return {
+        icon: "🎥",
+        color: "from-purple-500/20 to-violet-500/20",
+        border: "border-purple-400/40",
+        text: "text-purple-200",
+      };
+    }
+    if (
+      type.startsWith("audio/") ||
+      lowerName.match(/\.(mp3|wav|ogg|flac|m4a)$/i)
+    ) {
+      return {
+        icon: "🎵",
+        color: "from-cyan-500/20 to-blue-500/20",
+        border: "border-cyan-400/40",
+        text: "text-cyan-200",
+      };
+    }
+    if (type === "application/pdf" || lowerName.endsWith(".pdf")) {
+      return {
+        icon: "📄",
+        color: "from-red-500/20 to-orange-500/20",
+        border: "border-red-400/40",
+        text: "text-red-200",
+      };
+    }
+    if (
+      type.includes("document") ||
+      lowerName.match(/\.(doc|docx|txt|rtf)$/i)
+    ) {
+      return {
+        icon: "📝",
+        color: "from-blue-500/20 to-indigo-500/20",
+        border: "border-blue-400/40",
+        text: "text-blue-200",
+      };
+    }
+    if (type.includes("spreadsheet") || lowerName.match(/\.(xls|xlsx|csv)$/i)) {
+      return {
+        icon: "📊",
+        color: "from-green-500/20 to-emerald-500/20",
+        border: "border-green-400/40",
+        text: "text-green-200",
+      };
+    }
+    if (type.includes("presentation") || lowerName.match(/\.(ppt|pptx)$/i)) {
+      return {
+        icon: "📊",
+        color: "from-orange-500/20 to-amber-500/20",
+        border: "border-orange-400/40",
+        text: "text-orange-200",
+      };
+    }
+    if (
+      type.includes("zip") ||
+      type.includes("compressed") ||
+      lowerName.match(/\.(zip|rar|7z|tar|gz)$/i)
+    ) {
+      return {
+        icon: "📦",
+        color: "from-yellow-500/20 to-amber-500/20",
+        border: "border-yellow-400/40",
+        text: "text-yellow-200",
+      };
+    }
+    if (
+      lowerName.match(/\.(js|jsx|ts|tsx|py|java|cpp|c|html|css|json|xml)$/i)
+    ) {
+      return {
+        icon: "💻",
+        color: "from-slate-500/20 to-gray-500/20",
+        border: "border-slate-400/40",
+        text: "text-slate-200",
+      };
+    }
+
+    return {
+      icon: "📎",
+      color: "from-gray-500/20 to-slate-500/20",
+      border: "border-gray-400/40",
+      text: "text-gray-200",
+    };
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  };
+
   // Enhanced Markdown Components
   const sharedComponents: Partial<Components> = {
     p: ({ children }) => (
@@ -468,7 +647,9 @@ export default function ChatPage() {
       </h1>
     ),
     h2: ({ children }) => (
-      <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 mt-5 sm:mt-6 text-white">{children}</h2>
+      <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 mt-5 sm:mt-6 text-white">
+        {children}
+      </h2>
     ),
     h3: ({ children }) => (
       <h3 className="text-lg sm:text-xl font-semibold mb-2 sm:mb-3 mt-4 sm:mt-5 text-gray-100">
@@ -557,7 +738,9 @@ export default function ChatPage() {
                   onClick={() => toggleCodeBlock(codeId)}
                   className="text-[10px] sm:text-xs text-gray-400 hover:text-blue-400 flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-1 rounded hover:bg-gray-700/30 transition-all"
                 >
-                  <span className="hidden sm:inline">{isExpanded ? "Collapse" : "Expand"}</span>
+                  <span className="hidden sm:inline">
+                    {isExpanded ? "Collapse" : "Expand"}
+                  </span>
                   <ChevronDownIcon
                     className={`w-3 sm:w-3.5 h-3 sm:h-3.5 transition-transform ${
                       isExpanded ? "rotate-180" : ""
@@ -580,7 +763,9 @@ export default function ChatPage() {
           </div>
           <div
             className={`relative overflow-hidden transition-all duration-300 ${
-              shouldTruncate && !isExpanded ? "max-h-[400px] sm:max-h-[500px]" : "max-h-none"
+              shouldTruncate && !isExpanded
+                ? "max-h-[400px] sm:max-h-[500px]"
+                : "max-h-none"
             }`}
           >
             <SyntaxHighlighter
@@ -619,56 +804,9 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-full bg-gradient-to-br from-[#0a0b0f] via-[#0d0e14] to-[#0a0b0f] relative">
       {/* Header */}
-      <div className="absolute top-0 left-0 right-0 z-20 px-3 sm:px-4 md:px-6 py-2.5 sm:py-3.5 flex items-center justify-between bg-[#0d0e14]/98 backdrop-blur-xl border-b border-white/[0.08] shadow-2xl">
-        <div className="flex items-center gap-2 sm:gap-3">
-          
-          <div className="flex items-center gap-1 sm:gap-1.5">
-            <button
-              onClick={() => setIsFullWidth(!isFullWidth)}
-              className="p-1.5 sm:p-2 text-gray-400 hover:text-purple-400 hover:bg-purple-500/10 rounded-lg transition-all"
-              title={isFullWidth ? "Standard width" : "Full width"}
-            >
-              {isFullWidth ? (
-                <Squares2X2Icon className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-              ) : (
-                <ArrowsPointingOutIcon className="w-3.5 sm:w-4 h-3.5 sm:h-4" />
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* Model Selector */}
-        <div className="relative group min-w-[140px] sm:min-w-[180px]">
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="w-full appearance-none bg-[#1a1d26] hover:bg-[#1f2229] text-gray-200 text-[11px] sm:text-sm font-semibold rounded-lg sm:rounded-xl border border-gray-700/50 hover:border-blue-500/50 transition-all pl-3 sm:pl-4 pr-8 sm:pr-10 py-2 sm:py-2.5 focus:ring-2 focus:ring-blue-500/30 outline-none cursor-pointer shadow-lg"
-          >
-            <optgroup label="🎯 Recommended">
-              <option value="auto">✨ Smart-Select</option>
-            </optgroup>
-            <optgroup label="🧠 Intelligence">
-              <option value="gpt-5.2-pro">GPT-5.2 Pro</option>
-              <option value="claude-4.5-opus">Claude 4.5 Opus</option>
-              <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-            </optgroup>
-            <optgroup label="⚡ Standard">
-              <option value="gpt-5.2">GPT-5.2</option>
-              <option value="gemini-3-pro-preview">
-                Gemini 3 Pro
-              </option>
-              <option value="claude-4.5-sonnet">Claude 4.5 Sonnet</option>
-            </optgroup>
-            <optgroup label="🚀 Speed">
-              <option value="gemini-3-flash-preview">
-                Gemini 3 Flash
-              </option>
-              <option value="gpt-5-mini">GPT-5 Mini</option>
-              <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-              <option value="claude-4.5-haiku">Claude 4.5 Haiku</option>
-            </optgroup>
-          </select>
-          <CpuChipIcon className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 w-3 sm:w-4 h-3 sm:h-4 text-gray-500 pointer-events-none" />
+      <div className="absolute top-0 left-0 right-0 z-20 px-3 sm:px-3 md:px-5 py-2.5 sm:py-3.5 flex items-center justify-end bg-transparent border-none shadow-none pointer-events-none">
+        <div className="pointer-events-auto">
+          <ModelSelector model={model} setModel={setModel} />
         </div>
       </div>
 
@@ -679,9 +817,7 @@ export default function ChatPage() {
         className="flex-1 overflow-y-auto pt-16 sm:pt-20 pb-4 px-3 sm:px-4 md:px-6 scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
       >
         <div
-          className={`mx-auto space-y-4 sm:space-y-5 transition-all duration-300 ${
-            isFullWidth ? "max-w-full" : "max-w-5xl"
-          }`}
+          className={`mx-auto space-y-4 sm:space-y-5 transition-all duration-300 max-w-5xl`}
         >
           {messages.length === 0 && (
             <div className="h-[60vh] sm:h-[65vh] flex flex-col items-center justify-center text-center animate-in fade-in duration-1000 px-4">
@@ -759,9 +895,70 @@ export default function ChatPage() {
                       </div>
                     )}
                   </div>
-                ) : (
+                ) : msg.role === "system" ? (
                   <div className="leading-[1.7] break-words whitespace-pre-wrap text-sm sm:text-[15px]">
                     {msg.content}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {msg.content && (
+                      <div className="leading-[1.7] break-words whitespace-pre-wrap text-sm sm:text-[15px]">
+                        {msg.content}
+                      </div>
+                    )}
+
+                    {/* Enhanced Attachment Pills */}
+                    {msg.attachments && msg.attachments.length > 0 && (
+                      <div className="space-y-2 pt-2">
+                        <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-blue-200/70 font-medium">
+                          <svg
+                            className="w-3 h-3"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M8 4a3 3 0 00-3 3v4a5 5 0 0010 0V7a1 1 0 112 0v4a7 7 0 11-14 0V7a5 5 0 0110 0v4a3 3 0 11-6 0V7a1 1 0 012 0v4a1 1 0 102 0V7a3 3 0 00-3-3z"
+                              clipRule="evenodd"
+                            />
+                          </svg>
+                          <span>
+                            {msg.attachments.length}{" "}
+                            {msg.attachments.length === 1
+                              ? "Attachment"
+                              : "Attachments"}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {msg.attachments.map((file, idx) => {
+                            const fileInfo = getFileInfo(file.type, file.name);
+
+                            return (
+                              <div
+                                key={idx}
+                                className={`group/file relative flex items-center gap-2 bg-gradient-to-br ${fileInfo.color} backdrop-blur-sm border ${fileInfo.border} rounded-lg px-3 py-2 transition-all duration-200 hover:scale-[1.02] hover:shadow-lg`}
+                              >
+                                <div className="flex items-center justify-center w-8 h-8 rounded-md bg-white/10 backdrop-blur-sm">
+                                  <span className="text-lg">
+                                    {fileInfo.icon}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col min-w-0 flex-1">
+                                  <span
+                                    className={`text-xs font-semibold ${fileInfo.text} truncate max-w-[180px] sm:max-w-[280px]`}
+                                  >
+                                    {file.name}
+                                  </span>
+                                  <span className="text-[10px] text-blue-300/60 font-medium">
+                                    {formatSize(file.size)}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -798,7 +995,7 @@ export default function ChatPage() {
             </div>
           ))}
 
-          {/* Modern Thinking State */}
+          {/* Thinking State */}
           {isThinking && (
             <div className="flex items-start gap-3 sm:gap-4 animate-in fade-in pl-2 sm:pl-3">
               <div className="relative mt-1">
@@ -817,35 +1014,21 @@ export default function ChatPage() {
                     {thinkingMessage}
                   </span>
                   <span className="flex gap-1">
-                    <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-pink-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    <span
+                      className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-blue-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "0ms" }}
+                    />
+                    <span
+                      className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-purple-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "150ms" }}
+                    />
+                    <span
+                      className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-pink-400 rounded-full animate-bounce"
+                      style={{ animationDelay: "300ms" }}
+                    />
                   </span>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Streaming State */}
-          {isStreaming && (
-            <div className="flex items-center gap-2 sm:gap-3 animate-in fade-in pl-2">
-              <span className="flex gap-1.5 sm:gap-2">
-                <span
-                  className="w-2 h-2 sm:w-2.5 sm:h-2.5 bg-blue-500 rounded-full animate-bounce"
-                  style={{ animationDelay: "0ms" }}
-                />
-                <span
-                  className="w-2 h-2 sm:w-2.5 sm:h-2.5 bg-purple-500 rounded-full animate-bounce"
-                  style={{ animationDelay: "150ms" }}
-                />
-                <span
-                  className="w-2 h-2 sm:w-2.5 sm:h-2.5 bg-pink-500 rounded-full animate-bounce"
-                  style={{ animationDelay: "300ms" }}
-                />
-              </span>
-              <span className="text-xs sm:text-sm text-gray-400 font-medium">
-                Generating response...
-              </span>
             </div>
           )}
           <div ref={messagesEndRef} className="h-4" />
@@ -863,73 +1046,21 @@ export default function ChatPage() {
         </button>
       )}
 
-      {/* Input Area */}
-      <div className="p-3 sm:p-4 md:p-6 bg-[#0d0e14]/98 backdrop-blur-xl shadow-2x">
-        <div
-          className={`mx-auto relative group transition-all duration-300 ${
-            isFullWidth ? "max-w-full" : "max-w-5xl"
-          }`}
-        >
-          <div className="relative">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={isStreaming}
-              placeholder=""
-              rows={1}
-              className="w-full bg-[#1a1d26] text-white text-sm sm:text-[15px] leading-relaxed rounded-xl sm:rounded-2xl border border-gray-700/50 outline-none focus:outline-none pl-4 sm:pl-5 pr-14 sm:pr-16 py-3 sm:py-4 resize-none shadow-2xl disabled:opacity-50 disabled:cursor-not-allowed transition-all placeholder:text-transparent [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
-              style={{ maxHeight: "250px" }}
-            />
-
-            {/* Placeholder */}
-            {!input && !isStreaming && messages.length === 0 && (
-              <div
-                className={`absolute left-4 sm:left-5 top-3 sm:top-4 text-gray-500 text-sm sm:text-base pointer-events-none transition-opacity duration-300 ${
-                  fadePlaceholder ? "opacity-100" : "opacity-0"
-                }`}
-              >
-                {placeholderText}
-              </div>
-            )}
-
-            {isStreaming && !input && (
-              <div className="absolute left-4 sm:left-5 top-3 sm:top-4 text-gray-600 text-sm sm:text-base pointer-events-none">
-                ⏳ Waiting for AI response...
-              </div>
-            )}
-          </div>
-
-          {/* Action Buttons */}
-          <div className="absolute right-2 bottom-2 sm:bottom-2.5 flex items-center gap-1.5 sm:gap-2 z-20">
-            {isStreaming || isThinking ? (
-              <button
-                onClick={handleStop}
-                className="p-2.5 sm:p-3 bg-rose-500/15 text-rose-400 rounded-lg sm:rounded-xl hover:bg-rose-500/25 transition-all shadow-lg hover:shadow-rose-500/30 hover:scale-105"
-                title="Stop generation"
-              >
-                <StopIcon className="w-4 sm:w-5 h-4 sm:h-5" />
-              </button>
-            ) : (
-              <button
-                onClick={sendMessage}
-                disabled={!input.trim()}
-                className="p-2.5 sm:p-3 bg-gradient-to-br from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-lg sm:rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95"
-                title="Send message"
-              >
-                <PaperAirplaneIcon className="w-4 sm:w-5 h-4 sm:h-5" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Footer Notice */}
-        <p className="text-center text-[10px] sm:text-[11px] text-gray-500 mt-2.5 sm:mt-3.5 font-medium tracking-wide px-4">
-          ⚠️ AI responses may contain inaccuracies • Always verify critical
-          information
-        </p>
-      </div>
+      <ChatInput
+        input={input}
+        setInput={setInput}
+        selectedFiles={selectedFiles}
+        setSelectedFiles={setSelectedFiles}
+        isStreaming={isStreaming}
+        isThinking={isThinking}
+        onSend={sendMessage}
+        onStop={handleStop}
+        textareaRef={textareaRef}
+        isFullWidth={false}
+        showEmptyStatePlaceholder={messages.length === 0}
+        placeholderText={placeholderText}
+        fadePlaceholder={fadePlaceholder}
+      />
     </div>
   );
 }

@@ -39,7 +39,7 @@ export default function Header({ toggleSidebar, isMobile }: HeaderProps) {
       <div className="flex items-center gap-4 sm:gap-6">
         
         {/* Credits Badge */}
-        <div className="hidden md:flex items-center gap-2 bg-[#1a1d26] border border-gray-700/50 rounded-full px-4 py-1.5 shadow-sm">
+        <div className="flex flex-row items-center gap-2 bg-[#1a1d26] border border-gray-700/50 rounded-full px-4 py-1.5 shadow-sm">
             <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
             <span className="text-xs font-mono text-gray-300">
               {displayCredits} <span className="text-gray-500">credits</span>

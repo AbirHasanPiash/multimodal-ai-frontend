@@ -8,6 +8,9 @@ import ChatPage from "./pages/ChatPage";
 import BillingPage from "./pages/BillingPage";
 import HistoryPage from "./pages/HistoryPage";
 import { ChatResetProvider } from "./context/ChatResetContext";
+import TTSPage from "./pages/TTSPage";
+import ImagePage from "./pages/ImagePage";
+import AvatarPage from "./pages/AvatarPage";
 
 function App() {
   return (
@@ -30,6 +33,9 @@ function App() {
               <Route index element={<ChatPage />} />
               <Route path="chat/:chatId" element={<ChatPage />} />
               <Route path="history" element={<HistoryPage />} />
+              <Route path="tts" element={<TTSPage />} />
+              <Route path="images" element={<ImagePage />} />
+              <Route path="avatar" element={<AvatarPage />} />
               <Route path="billing" element={<BillingPage />} />
             </Route>
 

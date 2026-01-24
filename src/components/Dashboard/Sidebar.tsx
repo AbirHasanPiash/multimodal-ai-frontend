@@ -6,7 +6,10 @@ import {
   PlusIcon,
   ClockIcon,
   ChevronDoubleLeftIcon,
-  ChevronDoubleRightIcon
+  ChevronDoubleRightIcon,
+  SpeakerWaveIcon,
+  PhotoIcon,
+  UserCircleIcon
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../context/AuthContext';
 import { useChatReset } from '../../context/ChatResetContext';
@@ -23,8 +26,11 @@ export default function Sidebar({ isOpen, toggle, isMobile }: SidebarProps) {
   const { triggerReset } = useChatReset(); 
 
   const navItems = [
-    { name: 'New Chat', path: '/dashboard', icon: PlusIcon },
-    { name: 'History', path: '/dashboard/history', icon: ClockIcon },
+    { name: 'New AI Chat', path: '/dashboard', icon: PlusIcon },
+    { name: 'Chat History', path: '/dashboard/history', icon: ClockIcon },
+    { name: 'AI TTS', path: '/dashboard/tts', icon: SpeakerWaveIcon },
+    { name: 'AI Images', path: '/dashboard/images', icon: PhotoIcon },
+    { name: 'AI Avatar', path: '/dashboard/avatar', icon: UserCircleIcon },
     { name: 'Billing', path: '/dashboard/billing', icon: CreditCardIcon },
     { name: 'Settings', path: '/dashboard/settings', icon: Cog6ToothIcon },
   ];
@@ -72,7 +78,7 @@ export default function Sidebar({ isOpen, toggle, isMobile }: SidebarProps) {
         {/* Navigation Items */}
         <nav className="flex-1 px-3 space-y-2 mt-4">
           {navItems.map((item) => {
-            const isActive = pathname === item.path || (item.name === 'New Chat' && pathname.includes('/chat/'));
+            const isActive = pathname === item.path || (item.name === 'New Chat' && pathname === '/dashboard');
             
             return (
               <Link
