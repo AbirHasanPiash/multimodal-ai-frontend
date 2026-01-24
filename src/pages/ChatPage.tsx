@@ -213,7 +213,7 @@ export default function ChatPage() {
     const host =
       window.location.hostname === "localhost"
         ? "localhost:8000"
-        : "multimodal-ai-z9yy.onrender.com";
+        : "api.multiaimodel.com";
 
     const connect = () => {
       const targetChatId = internalChatIdRef.current || activeChatId || "";
