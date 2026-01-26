@@ -27,7 +27,7 @@ interface AvatarVideo {
   id: string;
   public_url: string | null;
   thumbnail_url: string | null;
-  status: 'processing' | 'completed' | 'failed';
+  status: 'processing' | 'processing_external' | 'completed' | 'failed';
   text_prompt: string;
   created_at: string;
   avatar_image_url: string;
@@ -100,7 +100,9 @@ export default function AvatarPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Data
-  const { data: videos, mutate, isLoading } = useSWR<AvatarVideo[]>('/media/videos/list', fetcher);
+  const { data: videos, mutate, isLoading } = useSWR<AvatarVideo[]>('/media/videos/list', fetcher,{ 
+        refreshInterval: 5000
+    });
   // Fetch Image History for the Library
   const { data: imageLibrary } = useSWR<GeneratedImage[]>('/media/images/list?limit=20', fetcher);
 
@@ -678,6 +680,7 @@ function VideoCard({
             setIsDownloading(false);
         }
     };
+    const isLoading = video.status === 'processing' || video.status === 'processing_external';
 
     return (
       <div className={`group bg-slate-900/50 backdrop-blur-sm border ${isHighlighted ? 'border-green-500/50 shadow-green-900/20' : 'border-slate-800/50 hover:border-slate-700'} rounded-2xl transition-all shadow-lg overflow-hidden flex flex-col relative`}>
@@ -702,12 +705,18 @@ function VideoCard({
                 />
             ) : (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-3">
-                    {video.status === 'processing' ? (
-                        <ArrowPathIcon className="w-8 h-8 text-purple-500 animate-spin" />
+                    {isLoading ? (
+                        <>
+                            <ArrowPathIcon className="w-8 h-8 text-purple-500 animate-spin" />
+                            <span className="text-xs text-purple-300 font-medium animate-pulse">
+                                {video.status === 'processing_external' 
+                                    ? 'Rendering with AI...' 
+                                    : 'Preparing Assets...'}
+                            </span>
+                        </>
                     ) : (
                         <span className="text-red-500 font-medium">Generation Failed</span>
                     )}
-                    <span className="text-xs text-gray-400 uppercase tracking-wide">{video.status}</span>
                 </div>
             )}
         </div>
